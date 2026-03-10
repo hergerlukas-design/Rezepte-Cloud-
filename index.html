@@ -6,17 +6,14 @@
     <title>Freundeskochbuch</title>
     
     <link rel="manifest" href="manifest.json">
-
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Freundeskochbuch">
     <link rel="apple-touch-icon" href="https://fav.farm/🍳">
-
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#faf9f6">
+    <link rel="icon" href="https://fav.farm/🍳">
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
     <style>
         :root { 
             --primary: #84a59d;    /* Salbeigrün */
@@ -77,7 +74,7 @@
     </header>
 
     <div class="container" id="recipe-list">
-        <p style="text-align:center; opacity:0.5; margin-top:40px;">Lade Rezepte aus der Cloud...</p>
+        <p style="text-align:center; opacity:0.5; margin-top:40px;">Verbinde mit Firebase Cloud...</p>
     </div>
 
     <div class="fab-container" id="fabContainer">
@@ -105,61 +102,78 @@
         <button class="save-btn" onclick="importRecipe()">Hinzufügen</button>
     </div>
 
-    <script>
-        const SUPABASE_URL = 'https://jtswqnsasjngicnrmhxg.supabase.co'; 
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp0c3dxbnNhc2puZ2ljbnJtaHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE3ODk0MTcsImV4cCI6MjA4NzM2NTQxN30.PeYrBhTpiVmpmnMY-Y7x7FPt6DY_XsCa6r-AtugcJe8';
-        
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getFirestore, collection, getDocs, addDoc, updateDoc, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
+        // --- FIREBASE KONFIGURATION ---
+        // Kopiere diese Werte aus deinen Firebase-Projekteinstellungen
+        const firebaseConfig = {
+            apiKey: "AIzaSyB_-13jHJh0M-GJ7V2R0fjaIBkIJGhLHRE",
+            authDomain: "freundeskochbuch.firebaseapp.com",
+            projectId: "freundeskochbuch",
+            storageBucket: "freundeskochbuch.firebasestorage.app",
+            messagingSenderId: "459727622770",
+            appId: "1:459727622770:web:7cdbaaba77678036bbe8eb"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
         let recipes = [];
 
-        async function renderRecipes() {
-            const { data, error } = await supabaseClient
-                .from('rezepte')
-                .select('*')
-                .order('title', { ascending: true });
+        // Funktionen global verfügbar machen
+        window.renderRecipes = async function() {
+            try {
+                const querySnapshot = await getDocs(collection(db, "rezepte"));
+                recipes = [];
+                querySnapshot.forEach((doc) => {
+                    let data = doc.data();
+                    data.id = doc.id; // Firebase ID speichern
+                    recipes.push(data);
+                });
 
-            if (error) {
-                console.error("Fehler:", error);
-                document.getElementById('recipe-list').innerHTML = "<p style='text-align:center; color:red;'>Verbindung fehlgeschlagen.</p>";
-                return;
+                // Alphabetisch sortieren
+                recipes.sort((a, b) => a.title.localeCompare(b.title));
+
+                const list = document.getElementById('recipe-list');
+                list.innerHTML = recipes.length ? "" : "<p style='text-align:center; opacity:0.5; margin-top:40px;'>Noch keine Rezepte in der Cloud.</p>";
+                
+                recipes.forEach((r, i) => {
+                    const ings = r.ingredients.split('\n').filter(t => t.trim()).map(t => 
+                        `<div class="ingredient-item"><input type="checkbox"> <span>${t}</span></div>`
+                    ).join('');
+
+                    list.innerHTML += `
+                        <details class="recipe-item">
+                            <summary>
+                                <div style="display: flex; flex-direction: column;">
+                                    <span>${r.title}</span>
+                                    <small style="font-weight: normal; font-size: 0.75rem; color: var(--primary); margin-top: 4px;">
+                                        ${r.author ? '👨‍🍳 ' + r.author : ''}
+                                    </small>
+                                </div>
+                            </summary>
+                            <div class="recipe-content">
+                                <strong>Zutaten:</strong><br>${ings}
+                                <hr style="border:0; border-top:1px solid #e5dfcc; margin:15px 0;">
+                                <strong>Zubereitung:</strong><p>${r.instructions.replace(/\n/g, '<br>')}</p>
+                                <div class="btn-group">
+                                    <button onclick="openEdit(${i})">Bearbeiten</button>
+                                    <button onclick="shareRecipe(${i})">Teilen</button>
+                                    <button class="delete-btn-text" onclick="deleteRecipe('${r.id}')">Löschen</button>
+                                </div>
+                            </div>
+                        </details>`;
+                });
+            } catch (error) {
+                console.error("Fehler beim Laden:", error);
+                document.getElementById('recipe-list').innerHTML = "<p style='text-align:center; color:red;'>Verbindung fehlgeschlagen. Firebase eingerichtet?</p>";
             }
+        };
 
-            recipes = data;
-            const list = document.getElementById('recipe-list');
-            list.innerHTML = recipes.length ? "" : "<p style='text-align:center; opacity:0.5; margin-top:40px;'>Noch keine Rezepte in der Cloud.</p>";
-            
-            recipes.forEach((r, i) => {
-                const ings = r.ingredients.split('\n').filter(t => t.trim()).map(t => 
-                    `<div class="ingredient-item"><input type="checkbox"> <span>${t}</span></div>`
-                ).join('');
-
-                list.innerHTML += `
-                    <details class="recipe-item">
-                        <summary>
-                            <div style="display: flex; flex-direction: column;">
-                                <span>${r.title}</span>
-                                <small style="font-weight: normal; font-size: 0.75rem; color: var(--primary); margin-top: 4px;">
-                                    ${r.author ? '👩‍🍳 ' + r.author : ''}
-                                </small>
-                            </div>
-                        </summary>
-                        <div class="recipe-content">
-                            <strong>Zutaten:</strong><br>${ings}
-                            <hr style="border:0; border-top:1px solid #e5dfcc; margin:15px 0;">
-                            <strong>Zubereitung:</strong><p>${r.instructions.replace(/\n/g, '<br>')}</p>
-                            <div class="btn-group">
-                                <button onclick="openEdit(${i})">Bearbeiten</button>
-                                <button onclick="shareRecipe(${i})">Teilen</button>
-                                <button class="delete-btn-text" onclick="deleteRecipe(${r.id})">Löschen</button>
-                            </div>
-                        </div>
-                    </details>`;
-            });
-        }
-
-        async function saveRecipe() {
+        window.saveRecipe = async function() {
             const title = document.getElementById('title').value;
-            const author = document.getElementById('author').value; // Autor auslesen
+            const author = document.getElementById('author').value;
             const ingredients = document.getElementById('ingredients').value;
             const instructions = document.getElementById('instructions').value;
             const editId = document.getElementById('edit-index').value;
@@ -169,79 +183,80 @@
             const recipeData = { title, author, ingredients, instructions };
 
             if (editId === "") {
-                await supabaseClient.from('rezepte').insert([recipeData]);
+                await addDoc(collection(db, "rezepte"), recipeData);
             } else {
-                await supabaseClient.from('rezepte').update(recipeData).eq('id', editId);
+                await updateDoc(doc(db, "rezepte", editId), recipeData);
             }
 
-            closeAllOverlays();
-            renderRecipes();
-        }
+            window.closeAllOverlays();
+            window.renderRecipes();
+        };
 
-        function shareRecipe(index) {
+        window.shareRecipe = function(index) {
             const code = btoa(unescape(encodeURIComponent(JSON.stringify(recipes[index]))));
             navigator.clipboard.writeText(code).then(() => alert("Rezept-Code kopiert!"));
-        }
+        };
 
-        async function importRecipe() {
+        window.importRecipe = async function() {
             const code = document.getElementById('importCode').value.trim();
             try {
                 const decoded = JSON.parse(decodeURIComponent(escape(atob(code))));
                 delete decoded.id; 
-                await supabaseClient.from('rezepte').insert([decoded]);
+                await addDoc(collection(db, "rezepte"), decoded);
                 document.getElementById('importCode').value = "";
-                closeAllOverlays();
-                renderRecipes();
+                window.closeAllOverlays();
+                window.renderRecipes();
             } catch (e) { alert("Code ungültig"); }
-        }
+        };
 
-        function toggleFab() { document.getElementById('fabContainer').classList.toggle('open'); }
+        window.toggleFab = function() { document.getElementById('fabContainer').classList.toggle('open'); };
         
-        function openOverlay(id) {
-            closeAllOverlays();
+        window.openOverlay = function(id) {
+            window.closeAllOverlays();
             document.getElementById(id).style.display = 'block';
-            if(id !== 'editor-overlay') toggleFab(); 
-        }
+            if(id !== 'editor-overlay') window.toggleFab(); 
+        };
 
-        function closeAllOverlays() {
+        window.closeAllOverlays = function() {
             document.querySelectorAll('.overlay').forEach(o => o.style.display = 'none');
             document.getElementById('edit-index').value = "";
             document.getElementById('title').value = "";
-            document.getElementById('author').value = ""; // Feld leeren
+            document.getElementById('author').value = "";
             document.getElementById('ingredients').value = "";
             document.getElementById('instructions').value = "";
             document.getElementById('form-title').innerText = "Neues Rezept";
-            if(document.getElementById('fabContainer').classList.contains('open')) toggleFab();
-        }
+            if(document.getElementById('fabContainer').classList.contains('open')) window.toggleFab();
+        };
 
-        function openEdit(i) {
+        window.openEdit = function(i) {
             const r = recipes[i];
             document.getElementById('title').value = r.title;
-            document.getElementById('author').value = r.author || ""; // Autor laden
+            document.getElementById('author').value = r.author || "";
             document.getElementById('ingredients').value = r.ingredients;
             document.getElementById('instructions').value = r.instructions;
             document.getElementById('edit-index').value = r.id;
             document.getElementById('form-title').innerText = "Rezept bearbeiten";
             document.getElementById('editor-overlay').style.display = 'block';
-        }
+        };
 
-        async function deleteRecipe(id) {
+        window.deleteRecipe = async function(id) {
             if(confirm("Rezept endgültig aus der Cloud löschen?")) {
-                await supabaseClient.from('rezepte').delete().eq('id', id);
-                renderRecipes();
+                await deleteDoc(doc(db, "rezepte", id));
+                window.renderRecipes();
             }
-        }
+        };
 
-        function filterRecipes() {
+        window.filterRecipes = function() {
             const term = document.getElementById('searchBar').value.toLowerCase();
             document.querySelectorAll('.recipe-item').forEach(d => {
                 const title = d.querySelector('summary span').innerText.toLowerCase();
                 const author = d.querySelector('summary small').innerText.toLowerCase();
                 d.style.display = (title.includes(term) || author.includes(term)) ? "block" : "none";
             });
-        }
+        };
 
-        renderRecipes();
+        // Start
+        window.renderRecipes();
     </script>
 </body>
 </html>
